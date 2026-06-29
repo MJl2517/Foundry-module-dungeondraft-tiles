@@ -48,7 +48,7 @@
   "DDBrowser.DeleteTag": "Delete tag",
   "DDBrowser.ServiceTag": "Service tag",
   "DDBrowser.NoTags": "No tags yet.",
-  "DDBrowser.BulkAssignTags": "Bulk assign tags",
+  "DDBrowser.BulkAssignTags": "Assign tags",
   "DDBrowser.SelectTags": "Select tags",
   "DDBrowser.SelectAssets": "Select assets",
   "DDBrowser.SelectAll": "Select all",

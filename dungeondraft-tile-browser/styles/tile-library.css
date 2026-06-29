@@ -655,6 +655,14 @@
   display: grid;
   place-items: center;
   padding: 24px;
+  --ddb-accent: #b65c45;
+  --ddb-accent-strong: #df8a5d;
+  --ddb-border: rgba(170, 135, 105, 0.34);
+  --ddb-border-strong: rgba(223, 138, 93, 0.58);
+  --ddb-text: #f1ece3;
+  --ddb-muted: rgba(226, 220, 210, 0.68);
+  --ddb-field: rgba(15, 13, 14, 0.72);
+  --ddb-field-focus: rgba(223, 138, 93, 0.16);
   background: rgba(0, 0, 0, 0.45);
 }
 
@@ -752,11 +760,145 @@
   background: rgba(223, 138, 93, 0.16);
 }
 
+.ddb-tag-manager .ddb-tag-tools,
+.ddb-tag-manager .ddb-tag-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 188px;
+  align-items: stretch;
+}
+
+.ddb-tag-manager .ddb-tag-tools:not(:has(button)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ddb-tag-manager .ddb-tag-tools input,
+.ddb-tag-manager .ddb-tag-create input {
+  height: 34px;
+  padding: 0 10px;
+  border-color: rgba(255, 178, 109, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+  background: rgba(10, 10, 12, 0.86);
+}
+
+.ddb-tag-manager .ddb-tag-tools input::placeholder,
+.ddb-tag-manager .ddb-tag-create input::placeholder {
+  color: rgba(241, 236, 227, 0.56);
+}
+
+.ddb-tag-manager .ddb-tag-tools input:focus,
+.ddb-tag-manager .ddb-tag-create input:focus {
+  border-color: var(--ddb-accent-strong);
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 0 0 2px rgba(223, 138, 93, 0.18);
+  background: rgba(18, 15, 15, 0.94);
+}
+
+.ddb-tag-manager .ddb-tag-tools button,
+.ddb-tag-manager .ddb-tag-create button {
+  width: 188px;
+  min-height: 34px;
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
 .ddb-asset-manager-count {
   flex: 0 0 auto;
   color: var(--ddb-muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.ddb-asset-manager-tools {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto 118px 118px;
+  align-items: stretch;
+}
+
+.ddb-asset-manager-tools button {
+  width: 118px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.ddb-asset-manager-tags {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 178, 109, 0.28);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.ddb-asset-manager-tags__header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.ddb-asset-manager-tags__header strong {
+  color: #fff3e4;
+  white-space: nowrap;
+}
+
+.ddb-asset-manager-tags__header input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 178, 109, 0.36);
+  border-radius: 6px;
+  color: var(--ddb-text);
+  background: rgba(10, 10, 12, 0.78);
+}
+
+.ddb-asset-manager-tags__header input:focus {
+  border-color: var(--ddb-accent-strong);
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(223, 138, 93, 0.16);
+}
+
+.ddb-asset-manager-tag-grid {
+  min-height: 0;
+  max-height: 150px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  scrollbar-gutter: stable;
+}
+
+.ddb-asset-manager-tags__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ddb-asset-manager-tags__actions button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--ddb-border);
+  border-radius: 6px;
+  color: var(--ddb-text);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ddb-asset-manager-tags__actions button:hover,
+.ddb-asset-manager-tags__actions button:focus-visible {
+  border-color: var(--ddb-accent-strong);
+  color: #fff3e4;
+  outline: 0;
+  background: rgba(223, 138, 93, 0.16);
 }
 
 .ddb-entry-settings-form {
@@ -900,6 +1042,7 @@
 }
 
 .ddb-asset-check.ddb-asset-manager-card {
+  box-sizing: border-box;
   position: absolute;
   top: 0;
   left: 0;
@@ -1004,6 +1147,25 @@
   justify-content: flex-end;
 }
 
+.ddb-asset-manager .ddb-tag-actions {
+  position: relative;
+  z-index: 1;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 178, 109, 0.22);
+  background: rgba(31, 25, 24, 0.96);
+}
+
+.ddb-asset-manager .ddb-tag-actions button {
+  min-width: 118px;
+  min-height: 36px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.ddb-asset-manager .ddb-tag-actions .ddb-danger-button {
+  min-width: 198px;
+}
+
 .ddb-bulk-grid {
   min-height: 420px;
   display: grid;
@@ -1035,6 +1197,10 @@
 .ddb-pack-manager .ddb-tag-body {
   min-height: min(620px, calc(100vh - 150px));
   grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.ddb-asset-manager .ddb-tag-body {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .ddb-bulk-grid h3 {

@@ -48,7 +48,7 @@
   "DDBrowser.DeleteTag": "Удалить тег",
   "DDBrowser.ServiceTag": "Сервисный тег",
   "DDBrowser.NoTags": "Тегов пока нет.",
-  "DDBrowser.BulkAssignTags": "Массово назначить теги",
+  "DDBrowser.BulkAssignTags": "Назначить теги",
   "DDBrowser.SelectTags": "Выберите теги",
   "DDBrowser.SelectAssets": "Выберите ассеты",
   "DDBrowser.SelectAll": "Выбрать всё",

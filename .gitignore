@@ -2,6 +2,7 @@
 .agents/
 .codex/
 secret/
+/scripts/
 
 # Archives and temporary exports
 *.rar

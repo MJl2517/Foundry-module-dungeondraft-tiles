@@ -706,7 +706,7 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
           body.querySelector("[data-create-tag]")?.click();
         }
       });
-      body.querySelector("[data-bulk-assign-tags]")?.addEventListener("click", () => this.openBulkAssetTagDialog());
+      body.querySelector("[data-bulk-assign-tags]")?.addEventListener("click", () => this.openAssetManager());
       for (const button of body.querySelectorAll("[data-delete-tag]")) {
         button.addEventListener("click", async (event) => {
           const tagId = event.currentTarget.closest("[data-tag-id]")?.dataset.tagId;
@@ -1093,8 +1093,9 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const tagLabels = labels();
     const { body, close } = this.createTagDialog(tagLabels.AssetManager, "ddb-asset-manager");
     const selectedAssets = new Set();
+    const selectedTags = new Set();
     const gap = 8;
-    const itemWidth = 150;
+    const minItemWidth = 150;
     const rowHeight = 166;
     let assetSearch = "";
     let allAssets = [];
@@ -1130,7 +1131,9 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       const empty = body.querySelector("[data-asset-manager-empty]");
       if (!viewport || !canvas) return;
 
-      const columns = Math.max(1, Math.floor((viewport.clientWidth + gap) / (itemWidth + gap)));
+      const viewportWidth = Math.max(0, viewport.clientWidth);
+      const columns = Math.max(1, Math.floor((viewportWidth + gap) / (minItemWidth + gap)));
+      const itemWidth = Math.max(minItemWidth, Math.floor((viewportWidth - gap * (columns - 1)) / columns));
       const totalRows = Math.ceil(visibleAssets.length / columns);
       const maxScroll = Math.max(0, totalRows * rowHeight - viewport.clientHeight);
       if (viewport.scrollTop > maxScroll) viewport.scrollTop = maxScroll;
@@ -1176,6 +1179,63 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       scheduleVisibleRender();
     };
 
+    const renderTagAssignmentPanel = (tagSearch = "", focusSearch = false) => {
+      const panel = body.querySelector("[data-asset-manager-tags-panel]");
+      if (!panel) return;
+
+      const query = tagSearch.trim().toLowerCase();
+      const tags = LibraryStore.getUserTags("asset").filter((tag) => !isServiceTag(tag));
+      const visibleTags = tags.filter((tag) => !query || tag.name.toLowerCase().includes(query));
+      panel.innerHTML = `
+        <div class="ddb-asset-manager-tags__header">
+          <strong>${escapeHtml(tagLabels.SelectTags)}</strong>
+          <input type="search" data-asset-manager-tag-search value="${escapeAttribute(tagSearch)}" placeholder="${escapeAttribute(tagLabels.SearchTags)}">
+        </div>
+        <div class="ddb-asset-manager-tag-grid">
+          ${visibleTags.length ? visibleTags.map((tag) => `
+            <label class="ddb-tag-check">
+              <input type="checkbox" data-asset-manager-tag="${escapeAttribute(tag.id)}" ${selectedTags.has(tag.id) ? "checked" : ""}>
+              <span>${escapeHtml(tag.name)}</span>
+            </label>
+          `).join("") : `<p class="ddb-tag-empty">${escapeHtml(tagLabels.NoTags)}</p>`}
+        </div>
+        <div class="ddb-asset-manager-tags__actions">
+          <button type="button" data-close-asset-tags>${escapeHtml(tagLabels.Cancel)}</button>
+          <button type="button" data-apply-asset-tags>${escapeHtml(tagLabels.ApplyTags)}</button>
+        </div>
+      `;
+
+      panel.querySelector("[data-asset-manager-tag-search]")?.addEventListener("input", (event) => renderTagAssignmentPanel(event.currentTarget.value, true));
+      for (const checkbox of panel.querySelectorAll("[data-asset-manager-tag]")) {
+        checkbox.addEventListener("change", (event) => {
+          const tagId = event.currentTarget.dataset.assetManagerTag;
+          if (event.currentTarget.checked) selectedTags.add(tagId);
+          else selectedTags.delete(tagId);
+        });
+      }
+      panel.querySelector("[data-close-asset-tags]")?.addEventListener("click", () => {
+        panel.hidden = true;
+      });
+      panel.querySelector("[data-apply-asset-tags]")?.addEventListener("click", async () => {
+        if (!selectedTags.size) {
+          ui.notifications.warn(t("NoTagsSelected"));
+          return;
+        }
+        if (!selectedAssets.size) {
+          ui.notifications.warn(t("NoAssetsSelected"));
+          return;
+        }
+
+        const changed = await LibraryStore.addTagsToAssets(Array.from(selectedAssets), Array.from(selectedTags));
+        ui.notifications.info(formatLabel("AssetsTagged", { count: changed }));
+        selectedTags.clear();
+        panel.hidden = true;
+        this.updateTagFilterButton();
+        this.refreshGrid();
+      });
+      if (focusSearch) focusInput(panel.querySelector("[data-asset-manager-tag-search]"));
+    };
+
     rebuildAssetSource();
     body.innerHTML = `
       <div class="ddb-asset-manager-tools">
@@ -1184,12 +1244,17 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         <button type="button" data-select-visible-assets>${escapeHtml(tagLabels.SelectAll)}</button>
         <button type="button" data-clear-visible-assets>${escapeHtml(tagLabels.ClearAll)}</button>
       </div>
+      <section class="ddb-asset-manager-tags" data-asset-manager-tags-panel hidden></section>
       <div class="ddb-asset-manager-viewport" data-asset-manager-viewport>
         <div class="ddb-asset-manager-canvas" data-asset-manager-canvas></div>
         <p class="ddb-tag-empty ddb-asset-manager-empty" data-asset-manager-empty hidden>${escapeHtml(tagLabels.NoTiles)}</p>
       </div>
       <footer class="ddb-tag-actions">
         <button type="button" data-close-tags>${escapeHtml(tagLabels.Cancel)}</button>
+        <button type="button" data-open-asset-tag-assign>
+          <i class="fa-solid fa-tags"></i>
+          <span>${escapeHtml(tagLabels.ApplyTags)}</span>
+        </button>
         <button type="button" class="ddb-danger-button" data-delete-selected-assets>
           <i class="fa-solid fa-trash-can"></i>
           <span>${escapeHtml(tagLabels.DeleteSelectedAssets)}</span>
@@ -1213,6 +1278,17 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     body.querySelector("[data-close-tags]")?.addEventListener("click", () => {
       if (renderFrame !== null) cancelAnimationFrame(renderFrame);
       close();
+    });
+    body.querySelector("[data-open-asset-tag-assign]")?.addEventListener("click", () => {
+      if (!selectedAssets.size) {
+        ui.notifications.warn(t("NoAssetsSelected"));
+        return;
+      }
+
+      const panel = body.querySelector("[data-asset-manager-tags-panel]");
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) renderTagAssignmentPanel();
     });
     body.querySelector("[data-delete-selected-assets]")?.addEventListener("click", async () => {
       if (!selectedAssets.size) {
