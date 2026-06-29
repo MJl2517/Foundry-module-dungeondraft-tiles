@@ -1,0 +1,138 @@
+<section class="ddb-layout">
+  <aside class="ddb-sidebar">
+    <div class="ddb-section-header">
+      <h2>{{labels.Packs}}</h2>
+      {{#if canImport}}
+        <button type="button" class="ddb-icon-button" data-manage-packs title="{{labels.PackManager}}">
+          <i class="fa-solid fa-boxes-stacked"></i>
+        </button>
+        <button type="button" class="ddb-icon-button" data-manage-pack-tags title="{{labels.ManageTags}}">
+          <i class="fa-solid fa-tags"></i>
+        </button>
+      {{/if}}
+      {{#if canImport}}
+        <button type="button" class="ddb-icon-button" data-import-pack title="{{labels.ImportPack}}">
+          <i class="fa-solid fa-file-import"></i>
+        </button>
+        <button type="button" class="ddb-icon-button" data-import-folder title="{{labels.ImportFolder}}">
+          <i class="fa-solid fa-folder-plus"></i>
+        </button>
+      {{/if}}
+    </div>
+
+    <div class="ddb-sidebar-filters">
+      <input type="search" data-asset-search value="{{filters.assetSearch}}" placeholder="{{labels.Search}}" autocomplete="off">
+      <select data-author aria-label="{{labels.Author}}">
+        <option value="">{{labels.AllAuthors}}</option>
+        {{#each authors as |author|}}
+          <option value="{{author.value}}" {{#if author.selected}}selected{{/if}}>{{author.value}}</option>
+        {{/each}}
+      </select>
+    </div>
+
+    {{#if canImport}}
+      <div class="ddb-pack-bulk-actions">
+        <button type="button" data-enable-visible-packs>{{labels.EnableAll}}</button>
+        <button type="button" data-disable-visible-packs>{{labels.DisableAll}}</button>
+      </div>
+    {{/if}}
+
+    {{#if canImport}}
+      <p class="ddb-drop-hint">{{labels.DropHint}}</p>
+    {{/if}}
+
+    <div class="ddb-pack-list">
+      {{#each packs as |pack|}}
+        <label
+          class="ddb-pack-row"
+          data-pack-row
+          data-pack-id="{{pack.id}}"
+          data-pack-author="{{pack.author}}"
+          data-pack-haystack="{{pack.name}} {{pack.author}} {{pack.sourceId}}"
+        >
+          <input type="checkbox" data-pack-enabled="{{pack.id}}" {{checked pack.enabled}}>
+          <span class="ddb-pack-row__text">
+            <strong>{{pack.name}}</strong>
+            <small>{{pack.author}} - {{pack.assetCount}}</small>
+          </span>
+        </label>
+      {{/each}}
+    </div>
+
+    <section class="ddb-placement-options" aria-label="{{labels.PlacementOptions}}">
+      <label class="ddb-check-row">
+        <input type="checkbox" data-snap-to-grid {{checked snapToGrid}}>
+        <span>{{labels.SnapToGrid}}</span>
+      </label>
+      <label class="ddb-check-row">
+        <input type="checkbox" data-lock-placed-tiles {{checked lockPlacedTiles}}>
+        <span>{{labels.LockPlacedTiles}}</span>
+      </label>
+      <label class="ddb-dpi-row">
+        <span>{{labels.MapDpi}}</span>
+        <input type="number" data-map-dpi value="{{mapDpi}}" min="1" max="4096" step="1" inputmode="numeric">
+      </label>
+    </section>
+
+    <section class="ddb-palette" aria-label="{{labels.ColorPalette}}">
+      <div class="ddb-palette__header">
+        <label class="ddb-palette__current">
+          <span>{{labels.Color}}</span>
+          <input type="color" data-color value="{{color}}">
+        </label>
+        <button type="button" class="ddb-icon-button" data-eyedropper title="{{labels.EyeDropper}}" {{#unless hasEyeDropper}}disabled{{/unless}}>
+          <i class="fa-solid fa-eye-dropper"></i>
+        </button>
+      </div>
+
+      <div class="ddb-palette__swatches">
+        {{#each paletteSwatches as |swatch|}}
+          <button
+            type="button"
+            class="ddb-swatch {{#if swatch.favorite}}is-favorite{{/if}} {{#if swatch.selected}}is-selected{{/if}}"
+            data-palette-color="{{swatch.color}}"
+            style="--swatch-color: {{swatch.color}}"
+            title="{{swatch.color}}"
+            aria-label="{{swatch.color}}"
+          ></button>
+        {{/each}}
+      </div>
+    </section>
+  </aside>
+
+  <main class="ddb-main">
+    <header class="ddb-toolbar ddb-toolbar--compact">
+      {{#if canImport}}
+        <button type="button" class="ddb-icon-button" data-manage-assets title="{{labels.AssetManager}}">
+          <i class="fa-solid fa-images"></i>
+        </button>
+        <button type="button" class="ddb-icon-button" data-manage-asset-tags title="{{labels.ManageTags}}">
+          <i class="fa-solid fa-tags"></i>
+        </button>
+      {{/if}}
+      <button type="button" class="ddb-icon-button {{#if selectedTagFilterCount}}is-active{{/if}}" data-filter-asset-tags title="{{labels.FilterTags}}">
+        <i class="fa-solid fa-filter"></i>
+        {{#if selectedTagFilterCount}}<span class="ddb-filter-count">{{selectedTagFilterCount}}</span>{{/if}}
+      </button>
+      <button type="button" class="ddb-icon-button" data-clear-filters title="{{labels.ClearFilters}}">
+        <i class="fa-solid fa-filter-circle-xmark"></i>
+      </button>
+    </header>
+
+    <p class="ddb-status" data-status hidden></p>
+
+    <div class="ddb-grid-viewport" data-tile-grid-viewport>
+      <div class="ddb-grid-canvas" data-tile-grid-canvas></div>
+      <p class="ddb-empty" data-empty hidden>{{labels.NoTiles}}</p>
+    </div>
+
+    <footer class="ddb-placement-help">
+      <span>{{labels.PlaceHintClick}}</span>
+      <span>{{labels.PlaceHintWheel}}</span>
+      <span>{{labels.PlaceHintScale}}</span>
+      <span>{{labels.PlaceHintMulti}}</span>
+      <span>{{labels.PlaceHintCancel}}</span>
+      <span>{{labels.PlaceHintPan}}</span>
+    </footer>
+  </main>
+</section>

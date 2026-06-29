@@ -1,0 +1,88 @@
+<form class="ddb-settings-form" data-settings-form>
+  <p class="ddb-settings-hint">{{labels.SettingsHint}}</p>
+
+  <label class="ddb-form-row">
+    <span>{{labels.Language}}</span>
+    <select name="language">
+      {{#each languageOptions as |option|}}
+        <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <label class="ddb-form-row">
+    <span>{{labels.ImportPath}}</span>
+    <div class="ddb-path-input">
+      <input type="text" name="importPath" value="{{values.importPath}}" {{#unless canEditWorldSettings}}disabled{{/unless}}>
+      <button type="button" class="ddb-icon-button" data-browse-import-path title="{{labels.Browse}}" {{#unless canEditWorldSettings}}disabled{{/unless}}>
+        <i class="fa-solid fa-folder-open"></i>
+      </button>
+    </div>
+    <small>{{#if canEditWorldSettings}}{{labels.ImportPathHint}}{{else}}{{labels.GMOnlyPath}}{{/if}}</small>
+  </label>
+
+  <label class="ddb-form-row">
+    <span>{{labels.ThumbnailSize}}</span>
+    <select name="thumbnailPreset">
+      {{#each thumbnailOptions as |option|}}
+        <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <label class="ddb-form-row">
+    <span>{{labels.RotationStep}}</span>
+    <div class="ddb-slider-row">
+      <input type="range" name="rotationStep" value="{{values.rotationStep}}" min="1" max="90" step="1" data-setting-slider>
+      <output data-slider-output="rotationStep">{{values.rotationStep}}</output>
+    </div>
+  </label>
+
+  <label class="ddb-form-row">
+    <span>{{labels.ScaleStep}}</span>
+    <div class="ddb-slider-row">
+      <input type="range" name="scaleStep" value="{{values.scaleStep}}" min="0.05" max="1" step="0.05" data-setting-slider>
+      <output data-slider-output="scaleStep">{{values.scaleStep}}</output>
+    </div>
+  </label>
+
+  {{#if canEditWorldSettings}}
+    <section class="ddb-maintenance-zone">
+      <div>
+        <strong>{{labels.RebuildLibrary}}</strong>
+        <p>{{labels.RebuildLibraryHint}}</p>
+      </div>
+      <button type="button" data-rebuild-library>
+        <i class="fa-solid fa-rotate"></i>
+        <span>{{labels.RebuildLibrary}}</span>
+      </button>
+    </section>
+
+    <section class="ddb-danger-zone">
+      <div>
+        <strong>{{labels.DeleteModuleTiles}}</strong>
+        <p>{{labels.DeleteModuleTilesHint}}</p>
+      </div>
+      <button type="button" class="ddb-danger-button" data-delete-module-tiles>
+        <i class="fa-solid fa-trash-can"></i>
+        <span>{{labels.DeleteModuleTiles}}</span>
+      </button>
+    </section>
+
+    <section class="ddb-danger-zone ddb-danger-zone--critical">
+      <div>
+        <strong>{{labels.DeleteAllModuleData}}</strong>
+        <p>{{labels.DeleteAllModuleDataHint}}</p>
+      </div>
+      <button type="button" class="ddb-danger-button" data-delete-all-module-data>
+        <i class="fa-solid fa-bomb"></i>
+        <span>{{labels.DeleteAllModuleData}}</span>
+      </button>
+    </section>
+  {{/if}}
+
+  <footer class="ddb-settings-actions">
+    <button type="button" data-reset-settings>{{labels.ResetDefaults}}</button>
+    <button type="submit">{{labels.Save}}</button>
+  </footer>
+</form>

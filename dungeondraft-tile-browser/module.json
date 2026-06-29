@@ -1,0 +1,33 @@
+{
+  "id": "dungeondraft-tile-browser",
+  "title": "✨ Dungeondraft Tile Browser",
+  "description": "Import Dungeondraft asset packs and place their object textures as Foundry VTT tiles.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "MaJluHa"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/tile-library.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    },
+    {
+      "lang": "ru",
+      "name": "Russian",
+      "path": "lang/ru.json"
+    }
+  ]
+}

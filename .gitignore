@@ -1,0 +1,23 @@
+# Local assistant/tooling state
+.agents/
+.codex/
+secret/
+
+# Archives and temporary exports
+*.rar
+*.zip
+*.7z
+*.tmp
+*.bak
+
+# Windows metadata
+Thumbs.db
+Desktop.ini
+
+# Common development artifacts
+__pycache__/
+.venv/
+.env
+node_modules/
+dist/
+build/
