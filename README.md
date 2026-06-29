@@ -4,6 +4,8 @@
 
 Основной сценарий: у мастера есть `.dungeondraft_pack` или папка с картинками объектов, и нужно быстро находить нужный объект, фильтровать ассеты, перекрашивать поддерживаемые элементы и размещать их на сцене как Foundry Tiles.
 
+<img width="2846" height="1138" alt="screenshot" src="https://github.com/user-attachments/assets/4bbb78fe-668c-4b6e-a677-7d49ce3cd8ba" />
+
 ## Требования
 
 - Foundry VTT: версия 13.
