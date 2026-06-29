@@ -699,6 +699,7 @@
 }
 
 .ddb-tag-body {
+  box-sizing: border-box;
   min-height: 0;
   display: grid;
   gap: 8px;
@@ -807,8 +808,13 @@
 
 .ddb-asset-manager-count {
   flex: 0 0 auto;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ddb-muted);
   font-size: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -1150,20 +1156,39 @@
 .ddb-asset-manager .ddb-tag-actions {
   position: relative;
   z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) minmax(170px, 1fr) minmax(210px, auto);
+  gap: 10px;
+  align-items: stretch;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 178, 109, 0.22);
   background: rgba(31, 25, 24, 0.96);
 }
 
 .ddb-asset-manager .ddb-tag-actions button {
-  min-width: 118px;
+  width: 100%;
+  min-width: 0;
   min-height: 36px;
   padding: 0 14px;
   white-space: nowrap;
 }
 
 .ddb-asset-manager .ddb-tag-actions .ddb-danger-button {
-  min-width: 198px;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .ddb-asset-manager-tools {
+    grid-template-columns: minmax(220px, 1fr) auto;
+  }
+
+  .ddb-asset-manager-tools button {
+    width: auto;
+  }
+
+  .ddb-asset-manager .ddb-tag-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ddb-bulk-grid {
@@ -1187,20 +1212,45 @@
 
 .ddb-asset-manager .ddb-tag-window {
   width: min(920px, calc(100vw - 36px));
+  height: min(820px, calc(100vh - 72px));
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .ddb-pack-manager .ddb-tag-window {
   width: min(720px, calc(100vw - 36px));
 }
 
+.ddb-pack-manager .ddb-tag-body {
+  height: min(620px, calc(100vh - 150px));
+}
+
 .ddb-asset-manager .ddb-tag-body,
 .ddb-pack-manager .ddb-tag-body {
-  min-height: min(620px, calc(100vh - 150px));
+  min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .ddb-asset-manager .ddb-tag-body {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding-bottom: 10px;
+}
+
+.ddb-asset-manager .ddb-asset-manager-tools,
+.ddb-asset-manager .ddb-asset-manager-tags,
+.ddb-asset-manager .ddb-tag-actions {
+  flex: 0 0 auto;
+}
+
+.ddb-asset-manager .ddb-asset-manager-viewport {
+  flex: 1 1 auto;
+  min-height: 120px;
 }
 
 .ddb-bulk-grid h3 {
