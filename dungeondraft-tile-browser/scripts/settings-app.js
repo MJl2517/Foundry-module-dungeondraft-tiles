@@ -52,6 +52,7 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
         language,
         importPath: game.settings.get(MODULE_ID, "importPath") || DEFAULT_IMPORT_PATH,
         thumbnailPreset,
+        optimizedMode: Boolean(game.settings.get(MODULE_ID, "optimizedMode")),
         rotationStep: Number(game.settings.get(MODULE_ID, "rotationStep")) || 15,
         scaleStep: Number(game.settings.get(MODULE_ID, "scaleStep")) || 0.1
       }
@@ -65,6 +66,7 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     root.querySelector("[data-browse-import-path]")?.addEventListener("click", () => this.browseImportPath());
     root.querySelector("[data-reset-settings]")?.addEventListener("click", () => this.resetDefaults());
     root.querySelector("[data-rebuild-library]")?.addEventListener("click", () => this.rebuildLibrary());
+    root.querySelector("[data-generate-thumbnails]")?.addEventListener("click", (event) => this.generateThumbnails(event.currentTarget));
     root.querySelector("[data-delete-module-tiles]")?.addEventListener("click", () => this.deleteModuleTiles());
     root.querySelector("[data-delete-all-module-data]")?.addEventListener("click", () => this.deleteAllModuleData());
 
@@ -81,11 +83,13 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     const data = new FormData(event.currentTarget);
     const language = data.get("language") === "en" ? "en" : "ru";
     const thumbnailPreset = data.get("thumbnailPreset");
+    const optimizedMode = data.get("optimizedMode") === "on";
     const rotationStep = clampNumber(Number(data.get("rotationStep")), 1, 90, 15);
     const scaleStep = clampNumber(Number(data.get("scaleStep")), 0.05, 1, 0.1);
 
     await game.settings.set(MODULE_ID, "language", language);
     await game.settings.set(MODULE_ID, "thumbnailSize", THUMBNAIL_PRESETS[thumbnailPreset] ?? THUMBNAIL_PRESETS.medium);
+    await game.settings.set(MODULE_ID, "optimizedMode", optimizedMode);
     await game.settings.set(MODULE_ID, "rotationStep", rotationStep);
     await game.settings.set(MODULE_ID, "scaleStep", scaleStep);
 
@@ -115,12 +119,14 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
   async resetDefaults() {
     await game.settings.set(MODULE_ID, "language", "ru");
     await game.settings.set(MODULE_ID, "thumbnailSize", THUMBNAIL_PRESETS.medium);
+    await game.settings.set(MODULE_ID, "optimizedMode", false);
     await game.settings.set(MODULE_ID, "rotationStep", 15);
     await game.settings.set(MODULE_ID, "scaleStep", 0.1);
     if (game.user.isGM) await game.settings.set(MODULE_ID, "importPath", DEFAULT_IMPORT_PATH);
     this.updateFormValues({
       language: "ru",
       thumbnailPreset: "medium",
+      optimizedMode: false,
       importPath: DEFAULT_IMPORT_PATH,
       rotationStep: 15,
       scaleStep: 0.1
@@ -134,7 +140,8 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
 
     for (const [name, value] of Object.entries(values)) {
       const field = form.elements.namedItem(name);
-      if (field) field.value = String(value);
+      if (field?.type === "checkbox") field.checked = Boolean(value);
+      else if (field) field.value = String(value);
       const output = form.querySelector(`[data-slider-output="${name}"]`);
       if (output) output.value = String(value);
     }
@@ -167,6 +174,32 @@ export class ModuleSettingsApp extends HandlebarsApplicationMixin(ApplicationV2)
     } catch (error) {
       console.error(`${MODULE_ID} | Could not rebuild library from files`, error);
       ui.notifications.error(error.message || String(error));
+    }
+  }
+
+  async generateThumbnails(button) {
+    if (!game.user.isGM) return;
+
+    button.disabled = true;
+    ui.notifications.info(t("GenerateThumbnailsStarted"));
+    try {
+      const result = await LibraryStore.generateMissingThumbnails();
+      if (!result.total) {
+        ui.notifications.info(t("GenerateThumbnailsNone"));
+        return;
+      }
+
+      await TileLibraryApp.instance?.renderPreservingScroll();
+      ui.notifications.info(formatLabel("GenerateThumbnailsDone", {
+        generated: result.generated,
+        failed: result.failed,
+        total: result.total
+      }));
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not generate thumbnails`, error);
+      ui.notifications.error(error.message || String(error));
+    } finally {
+      button.disabled = false;
     }
   }
 

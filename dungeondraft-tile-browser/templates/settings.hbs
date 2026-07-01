@@ -30,6 +30,12 @@
     </select>
   </label>
 
+  <label class="ddb-form-row ddb-form-row--check">
+    <span>{{labels.OptimizedMode}}</span>
+    <input type="checkbox" name="optimizedMode" {{checked values.optimizedMode}}>
+    <small>{{labels.OptimizedModeHint}}</small>
+  </label>
+
   <label class="ddb-form-row">
     <span>{{labels.RotationStep}}</span>
     <div class="ddb-slider-row">
@@ -55,6 +61,17 @@
       <button type="button" data-rebuild-library>
         <i class="fa-solid fa-rotate"></i>
         <span>{{labels.RebuildLibrary}}</span>
+      </button>
+    </section>
+
+    <section class="ddb-maintenance-zone">
+      <div>
+        <strong>{{labels.GenerateThumbnails}}</strong>
+        <p>{{labels.GenerateThumbnailsHint}}</p>
+      </div>
+      <button type="button" data-generate-thumbnails>
+        <i class="fa-solid fa-images"></i>
+        <span>{{labels.GenerateThumbnails}}</span>
       </button>
     </section>
 

@@ -102,6 +102,7 @@
 
   <main class="ddb-main">
     <header class="ddb-toolbar ddb-toolbar--compact">
+      <input type="search" data-asset-name-search value="{{filters.assetNameSearch}}" placeholder="{{labels.SearchAssetNames}}" autocomplete="off">
       {{#if canImport}}
         <button type="button" class="ddb-icon-button" data-manage-assets title="{{labels.AssetManager}}">
           <i class="fa-solid fa-images"></i>
@@ -125,6 +126,18 @@
       <div class="ddb-grid-canvas" data-tile-grid-canvas></div>
       <p class="ddb-empty" data-empty hidden>{{labels.NoTiles}}</p>
     </div>
+
+    <nav class="ddb-pagination" data-asset-pagination hidden>
+      <button type="button" data-page-prev>
+        <i class="fa-solid fa-chevron-left"></i>
+        <span>{{labels.PreviousPage}}</span>
+      </button>
+      <span data-page-status></span>
+      <button type="button" data-page-next>
+        <span>{{labels.NextPage}}</span>
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+    </nav>
 
     <footer class="ddb-placement-help">
       <span>{{labels.PlaceHintClick}}</span>

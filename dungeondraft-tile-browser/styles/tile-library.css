@@ -306,11 +306,25 @@
   background: var(--ddb-field-focus);
 }
 
+.ddb-form-row--check {
+  grid-template-columns: minmax(120px, 1fr) auto;
+}
+
+.ddb-form-row--check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ddb-accent-strong);
+}
+
+.ddb-form-row--check small {
+  grid-column: 1 / -1;
+}
+
 .ddb-main {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 8px;
   overflow: hidden;
@@ -483,6 +497,7 @@
 }
 
 .ddb-grid-viewport {
+  flex: 1 1 auto;
   position: relative;
   min-height: 0;
   overflow: auto;
@@ -494,20 +509,20 @@
 }
 
 .ddb-placement-help {
+  flex: 0 0 auto;
   min-width: 0;
-  max-height: 58px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, max-content));
-  align-items: center;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  align-items: start;
   gap: 5px 12px;
   padding: 6px 8px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--ddb-border);
   border-radius: 8px;
   color: var(--ddb-muted);
   background: var(--ddb-surface);
   font-size: 11px;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .ddb-placement-help span {
@@ -517,9 +532,9 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .ddb-grid-canvas {
@@ -530,6 +545,61 @@
 .ddb-grid-viewport.is-empty {
   display: grid;
   place-items: center;
+}
+
+.ddb-pagination {
+  flex: 0 0 auto;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(120px, 1fr) minmax(110px, max-content);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--ddb-border);
+  border-radius: 8px;
+  color: var(--ddb-muted);
+  background: var(--ddb-surface);
+  font-size: 12px;
+}
+
+.ddb-pagination[hidden] {
+  display: none;
+}
+
+.ddb-pagination button {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--ddb-border);
+  border-radius: 6px;
+  color: var(--ddb-text);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ddb-pagination button:hover,
+.ddb-pagination button:focus-visible {
+  border-color: var(--ddb-accent-strong);
+  color: #fff3e4;
+  outline: 0;
+  background: rgba(223, 138, 93, 0.16);
+}
+
+.ddb-pagination button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ddb-pagination [data-page-status] {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ddb-pagination--manager,
+.ddb-pagination--bulk {
+  flex: 0 0 auto;
 }
 
 .ddb-tile-card {
@@ -918,12 +988,16 @@
   min-height: 0;
   overflow: auto;
   display: grid;
+  grid-auto-rows: 50px;
+  align-content: start;
   gap: 6px;
   padding-right: 2px;
 }
 
 .ddb-pack-manager-row {
   min-width: 0;
+  height: 50px;
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1207,7 +1281,7 @@
 }
 
 .ddb-bulk-grid .ddb-bulk-asset-section {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 
 .ddb-asset-manager .ddb-tag-window {
@@ -1244,6 +1318,7 @@
 
 .ddb-asset-manager .ddb-asset-manager-tools,
 .ddb-asset-manager .ddb-asset-manager-tags,
+.ddb-asset-manager .ddb-pagination,
 .ddb-asset-manager .ddb-tag-actions {
   flex: 0 0 auto;
 }
@@ -1455,6 +1530,83 @@
   border-color: var(--ddb-accent-strong);
   color: #fff3e4;
   background: rgba(223, 138, 93, 0.16);
+}
+
+.ddb-native-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.ddb-native-icon-button,
+.ddb-native-settings-actions button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 178, 109, 0.38);
+  border-radius: 6px;
+  color: #f1ece3;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.ddb-native-icon-button {
+  width: 34px;
+  padding: 0;
+}
+
+.ddb-native-settings-actions {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 178, 109, 0.32);
+  border-radius: 8px;
+  background: rgba(20, 15, 14, 0.38);
+}
+
+.ddb-native-settings-actions header {
+  display: grid;
+  gap: 2px;
+}
+
+.ddb-native-settings-actions small {
+  color: rgba(241, 236, 227, 0.68);
+}
+
+.ddb-native-settings-actions__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.ddb-native-settings-actions button:hover,
+.ddb-native-settings-actions button:focus-visible,
+.ddb-native-icon-button:hover,
+.ddb-native-icon-button:focus-visible {
+  border-color: var(--ddb-accent-strong);
+  color: #fff3e4;
+  outline: 0;
+  background: rgba(223, 138, 93, 0.16);
+}
+
+.ddb-native-settings-actions button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.ddb-native-settings-actions .ddb-native-danger {
+  border-color: rgba(255, 122, 122, 0.42);
+  color: #ffc8be;
+}
+
+.ddb-native-settings-actions .ddb-native-danger--critical {
+  border-color: rgba(255, 78, 78, 0.62);
+  color: #ffaca1;
 }
 
 @media (max-width: 820px) {

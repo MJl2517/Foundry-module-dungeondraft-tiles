@@ -5,6 +5,9 @@ import { TilePlacer } from "./tile-placer.js";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const COLOR_LIMIT = 20;
 const DEFAULT_MAP_DPI = 256;
+const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+const THUMBNAIL_CONCURRENCY = 2;
+const ASSET_PAGE_SIZE = 60;
 
 export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static instance = null;
@@ -31,19 +34,27 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   constructor(options = {}) {
     super(options);
-    this.filters = { assetSearch: "", author: "" };
+    this.filters = { assetSearch: "", assetNameSearch: "", author: "" };
     this.selectedAssetTagFilters = new Set();
     this.palette = getStoredPalette();
     this.color = this.palette.selected;
     this.snapToGrid = Boolean(game.settings.get(MODULE_ID, "snapToGrid"));
     this.lockPlacedTiles = Boolean(game.settings.get(MODULE_ID, "lockPlacedTiles"));
     this.mapDpi = normalizeMapDpi(game.settings.get(MODULE_ID, "mapDpi"));
+    this.optimizedMode = Boolean(game.settings.get(MODULE_ID, "optimizedMode"));
+    this.assetPage = 1;
     this.visibleAssets = [];
     this.itemSize = Number(game.settings.get(MODULE_ID, "thumbnailSize")) || 160;
     this.rowHeight = this.itemSize + 64;
     this.resizeObserver = null;
+    this.gridRenderFrame = null;
+    this.gridVersion = 0;
     this.contextMenu = null;
     this.tagDialog = null;
+    this.thumbnailQueue = [];
+    this.thumbnailQueuedIds = new Set();
+    this.thumbnailInFlight = 0;
+    this.thumbnailCache = new Map();
     this.boundCloseContextMenu = (event) => {
       if (event?.type === "keydown" && event.key !== "Escape") return;
       this.closeContextMenu();
@@ -89,6 +100,8 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _onClose(options) {
+    if (this.gridRenderFrame !== null) cancelAnimationFrame(this.gridRenderFrame);
+    this.gridRenderFrame = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.closeContextMenu();
@@ -101,6 +114,8 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     root.querySelector("[data-import-pack]")?.addEventListener("click", () => this.importPack());
     root.querySelector("[data-import-folder]")?.addEventListener("click", () => this.importFolder());
     root.querySelector("[data-clear-filters]")?.addEventListener("click", () => this.clearFilters());
+    root.querySelector("[data-page-prev]")?.addEventListener("click", () => this.changeAssetPage(-1));
+    root.querySelector("[data-page-next]")?.addEventListener("click", () => this.changeAssetPage(1));
     root.querySelector("[data-filter-asset-tags]")?.addEventListener("click", () => this.openAssetTagFilterDialog());
     root.querySelector("[data-manage-packs]")?.addEventListener("click", () => this.openPackManager());
     root.querySelector("[data-manage-pack-tags]")?.addEventListener("click", () => this.openTagManager("pack"));
@@ -108,11 +123,18 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     root.querySelector("[data-manage-asset-tags]")?.addEventListener("click", () => this.openTagManager("asset"));
     root.querySelector("[data-asset-search]")?.addEventListener("input", (event) => {
       this.filters.assetSearch = event.currentTarget.value;
+      this.assetPage = 1;
       this.refreshGrid();
       this.updatePackVisibility();
     });
+    root.querySelector("[data-asset-name-search]")?.addEventListener("input", (event) => {
+      this.filters.assetNameSearch = event.currentTarget.value;
+      this.assetPage = 1;
+      this.refreshGrid();
+    });
     root.querySelector("[data-author]")?.addEventListener("change", (event) => {
       this.filters.author = event.currentTarget.value;
+      this.assetPage = 1;
       this.refreshGrid();
       this.updatePackVisibility();
     });
@@ -161,12 +183,12 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     root.addEventListener("drop", (event) => this.onDrop(event));
 
     const viewport = root.querySelector("[data-tile-grid-viewport]");
-    viewport?.addEventListener("scroll", () => this.renderVisibleRows());
+    viewport?.addEventListener("scroll", () => this.scheduleRenderVisibleRows());
     viewport?.addEventListener("scroll", () => this.closeContextMenu());
     root.querySelector(".ddb-pack-list")?.addEventListener("scroll", () => this.closeContextMenu());
     this.resizeObserver?.disconnect();
     if (viewport && typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(() => this.renderVisibleRows());
+      this.resizeObserver = new ResizeObserver(() => this.scheduleRenderVisibleRows());
       this.resizeObserver.observe(viewport);
     }
   }
@@ -340,7 +362,8 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   clearFilters() {
-    this.filters = { assetSearch: "", author: "" };
+    this.filters = { assetSearch: "", assetNameSearch: "", author: "" };
+    this.assetPage = 1;
     this.selectedAssetTagFilters.clear();
     this.updateFilterControls();
     this.updateTagFilterButton();
@@ -376,13 +399,58 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   refreshGrid() {
+    this.gridVersion += 1;
+    this.optimizedMode = Boolean(game.settings.get(MODULE_ID, "optimizedMode"));
     this.visibleAssets = LibraryStore.getAssets({
       ...this.filters,
       assetTagIds: Array.from(this.selectedAssetTagFilters)
     });
+    this.assetPage = clampPage(this.assetPage, this.getAssetPageCount());
     this.clampGridScroll();
     this.renderVisibleRows();
     this.updateColorableState();
+    this.updatePaginationControls();
+  }
+
+  getAssetPageCount() {
+    if (!this.optimizedMode) return 1;
+    return Math.max(1, Math.ceil(this.visibleAssets.length / ASSET_PAGE_SIZE));
+  }
+
+  changeAssetPage(direction) {
+    if (!this.optimizedMode) return;
+    const nextPage = clampPage(this.assetPage + direction, this.getAssetPageCount());
+    if (nextPage === this.assetPage) return;
+
+    this.assetPage = nextPage;
+    this.gridVersion += 1;
+    const viewport = this.element?.querySelector("[data-tile-grid-viewport]");
+    if (viewport) viewport.scrollTop = 0;
+    this.renderVisibleRows();
+    this.updatePaginationControls();
+  }
+
+  updatePaginationControls() {
+    const controls = this.element?.querySelector("[data-asset-pagination]");
+    if (!controls) return;
+
+    const pageCount = this.getAssetPageCount();
+    controls.hidden = !this.optimizedMode || this.visibleAssets.length <= ASSET_PAGE_SIZE;
+    const status = controls.querySelector("[data-page-status]");
+    if (status) status.textContent = formatLabel("PageStatus", { page: this.assetPage, pages: pageCount });
+
+    const previous = controls.querySelector("[data-page-prev]");
+    const next = controls.querySelector("[data-page-next]");
+    if (previous) previous.disabled = this.assetPage <= 1;
+    if (next) next.disabled = this.assetPage >= pageCount;
+  }
+
+  scheduleRenderVisibleRows() {
+    if (this.gridRenderFrame !== null) return;
+    this.gridRenderFrame = requestAnimationFrame(() => {
+      this.gridRenderFrame = null;
+      this.renderVisibleRows();
+    });
   }
 
   clampGridScroll() {
@@ -399,6 +467,9 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   updateFilterControls() {
     const search = this.element?.querySelector("[data-asset-search]");
     if (search) search.value = this.filters.assetSearch;
+
+    const nameSearch = this.element?.querySelector("[data-asset-name-search]");
+    if (nameSearch) nameSearch.value = this.filters.assetNameSearch;
 
     const author = this.element?.querySelector("[data-author]");
     if (author) author.value = this.filters.author;
@@ -490,18 +561,28 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const gap = 10;
     const columns = Math.max(1, Math.floor((viewport.clientWidth + gap) / (this.itemSize + gap)));
-    const totalRows = Math.ceil(this.visibleAssets.length / columns);
-    const firstRow = Math.max(0, Math.floor(viewport.scrollTop / this.rowHeight) - 2);
-    const lastRow = Math.min(totalRows, Math.ceil((viewport.scrollTop + viewport.clientHeight) / this.rowHeight) + 2);
+    const pageStart = this.optimizedMode ? (this.assetPage - 1) * ASSET_PAGE_SIZE : 0;
+    const pageAssets = this.optimizedMode ? this.visibleAssets.slice(pageStart, pageStart + ASSET_PAGE_SIZE) : this.visibleAssets;
+    const totalRows = Math.ceil(pageAssets.length / columns);
+    const overscanRows = 1;
+    const firstRow = this.optimizedMode ? 0 : Math.max(0, Math.floor(viewport.scrollTop / this.rowHeight) - overscanRows);
+    const lastRow = this.optimizedMode ? totalRows : Math.min(totalRows, Math.ceil((viewport.scrollTop + viewport.clientHeight) / this.rowHeight) + overscanRows);
     const firstIndex = firstRow * columns;
-    const lastIndex = Math.min(this.visibleAssets.length, lastRow * columns);
+    const lastIndex = Math.min(pageAssets.length, lastRow * columns);
+    const rangeKey = `${this.gridVersion}:${columns}:${firstIndex}:${lastIndex}:${this.itemSize}:${this.optimizedMode}:${this.assetPage}`;
 
     viewport.classList.toggle("is-empty", this.visibleAssets.length === 0);
-    canvas.style.height = this.visibleAssets.length ? `${totalRows * this.rowHeight}px` : "0px";
+    canvas.style.height = pageAssets.length ? `${totalRows * this.rowHeight}px` : "0px";
+    if (canvas.dataset.rangeKey === rangeKey) {
+      empty.hidden = this.visibleAssets.length > 0;
+      return;
+    }
+
+    canvas.dataset.rangeKey = rangeKey;
     canvas.innerHTML = "";
 
     for (let index = firstIndex; index < lastIndex; index += 1) {
-      const asset = this.visibleAssets[index];
+      const asset = pageAssets[index];
       const column = index % columns;
       const row = Math.floor(index / columns);
       canvas.appendChild(this.createAssetCard(asset, column * (this.itemSize + gap), row * this.rowHeight));
@@ -524,7 +605,8 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const image = document.createElement("img");
     image.loading = "lazy";
     image.decoding = "async";
-    image.src = asset.thumbSrc || asset.src;
+    image.fetchPriority = "low";
+    image.src = this.getAssetThumbnailSource(asset);
     image.alt = asset.name;
 
     const label = document.createElement("span");
@@ -538,7 +620,59 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     card.append(image, label, meta);
     card.addEventListener("click", () => this.selectAsset(asset));
     card.addEventListener("contextmenu", (event) => this.openAssetContextMenu(event, asset));
+    this.queueThumbnailGeneration(asset);
     return card;
+  }
+
+  getAssetThumbnailSource(asset) {
+    const cached = this.thumbnailCache.get(asset.id);
+    if (cached) return cached;
+    if (asset.thumbSrc && asset.thumbSrc !== asset.src) return asset.thumbSrc;
+    if (!game.user?.isGM) return asset.thumbSrc || asset.src;
+    return TRANSPARENT_PIXEL;
+  }
+
+  queueThumbnailGeneration(asset) {
+    if (!game.user?.isGM) return;
+    if (!asset?.id || !asset.src) return;
+    if (asset.thumbSrc && asset.thumbSrc !== asset.src) return;
+    if (this.thumbnailCache.has(asset.id) || this.thumbnailQueuedIds.has(asset.id)) return;
+
+    this.thumbnailQueuedIds.add(asset.id);
+    this.thumbnailQueue.push(asset);
+    this.processThumbnailQueue();
+  }
+
+  processThumbnailQueue() {
+    while (this.thumbnailInFlight < THUMBNAIL_CONCURRENCY && this.thumbnailQueue.length) {
+      const asset = this.thumbnailQueue.shift();
+      this.thumbnailInFlight += 1;
+
+      LibraryStore.ensureAssetThumbnail(asset)
+        .then((thumbSrc) => {
+          if (!thumbSrc) return;
+          asset.thumbSrc = thumbSrc;
+          this.thumbnailCache.set(asset.id, thumbSrc);
+          this.updateRenderedAssetThumbnail(asset.id, thumbSrc);
+        })
+        .catch((error) => {
+          console.warn(`${MODULE_ID} | Could not generate asset thumbnail`, error);
+          this.updateRenderedAssetThumbnail(asset.id, asset.thumbSrc || asset.src);
+        })
+        .finally(() => {
+          this.thumbnailQueuedIds.delete(asset.id);
+          this.thumbnailInFlight = Math.max(0, this.thumbnailInFlight - 1);
+          this.processThumbnailQueue();
+        });
+    }
+  }
+
+  updateRenderedAssetThumbnail(assetId, thumbSrc) {
+    if (!thumbSrc) return;
+    const selector = `[data-asset-id="${CSS.escape(assetId)}"] img`;
+    for (const image of this.element?.querySelectorAll(selector) ?? []) {
+      image.src = thumbSrc;
+    }
   }
 
   openAssetContextMenu(event, asset) {
@@ -815,6 +949,7 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       body.querySelector("[data-close-tags]")?.addEventListener("click", close);
       body.querySelector("[data-apply-tag-filters]")?.addEventListener("click", async () => {
         this.selectedAssetTagFilters = selected;
+        this.assetPage = 1;
         close();
         this.updateTagFilterButton();
         this.refreshGrid();
@@ -979,6 +1114,8 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const { body, close } = this.createTagDialog(tagLabels.BulkAssignTags, "ddb-tag-bulk");
     const selectedTags = new Set();
     const selectedAssets = new Set();
+    const optimizedMode = Boolean(game.settings.get(MODULE_ID, "optimizedMode"));
+    let assetPage = 1;
 
     const render = (tagSearch = "", assetSearch = "", focusTarget = "") => {
       const library = LibraryStore.library;
@@ -997,6 +1134,10 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
           return haystack.includes(assetQuery);
         })
         .sort((a, b) => a.name.localeCompare(b.name));
+      const pageCount = optimizedMode ? Math.max(1, Math.ceil(visibleAssets.length / ASSET_PAGE_SIZE)) : 1;
+      assetPage = clampPage(assetPage, pageCount);
+      const pageStart = optimizedMode ? (assetPage - 1) * ASSET_PAGE_SIZE : 0;
+      const pageAssets = optimizedMode ? visibleAssets.slice(pageStart, pageStart + ASSET_PAGE_SIZE) : visibleAssets;
 
       body.innerHTML = `
         <div class="ddb-bulk-grid">
@@ -1019,8 +1160,13 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
               <button type="button" data-select-visible-assets>${escapeHtml(tagLabels.SelectAll)}</button>
               <button type="button" data-clear-visible-assets>${escapeHtml(tagLabels.ClearAll)}</button>
             </div>
+            <nav class="ddb-pagination ddb-pagination--bulk" data-bulk-asset-pagination ${optimizedMode && visibleAssets.length > ASSET_PAGE_SIZE ? "" : "hidden"}>
+              <button type="button" data-page-prev><i class="fa-solid fa-chevron-left"></i><span>${escapeHtml(tagLabels.PreviousPage)}</span></button>
+              <span data-page-status>${formatLabel("PageStatus", { page: assetPage, pages: pageCount })}</span>
+              <button type="button" data-page-next><span>${escapeHtml(tagLabels.NextPage)}</span><i class="fa-solid fa-chevron-right"></i></button>
+            </nav>
             <div class="ddb-asset-check-list">
-              ${visibleAssets.map((asset) => `
+              ${pageAssets.map((asset) => `
                 <label class="ddb-asset-check">
                   <input type="checkbox" data-bulk-asset="${escapeAttribute(asset.id)}" ${selectedAssets.has(asset.id) ? "checked" : ""}>
                   <span class="ddb-asset-check__thumb">
@@ -1042,7 +1188,23 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       `;
 
       body.querySelector("[data-bulk-tag-search]")?.addEventListener("input", (event) => render(event.currentTarget.value, assetSearch, "tag"));
-      body.querySelector("[data-bulk-asset-search]")?.addEventListener("input", (event) => render(tagSearch, event.currentTarget.value, "asset"));
+      body.querySelector("[data-bulk-asset-search]")?.addEventListener("input", (event) => {
+        assetPage = 1;
+        render(tagSearch, event.currentTarget.value, "asset");
+      });
+      const bulkPagination = body.querySelector("[data-bulk-asset-pagination]");
+      if (bulkPagination) {
+        bulkPagination.querySelector("[data-page-prev]")?.toggleAttribute("disabled", assetPage <= 1);
+        bulkPagination.querySelector("[data-page-next]")?.toggleAttribute("disabled", assetPage >= pageCount);
+        bulkPagination.querySelector("[data-page-prev]")?.addEventListener("click", () => {
+          assetPage = clampPage(assetPage - 1, pageCount);
+          render(tagSearch, assetSearch);
+        });
+        bulkPagination.querySelector("[data-page-next]")?.addEventListener("click", () => {
+          assetPage = clampPage(assetPage + 1, pageCount);
+          render(tagSearch, assetSearch);
+        });
+      }
       for (const checkbox of body.querySelectorAll("[data-bulk-tag]")) {
         checkbox.addEventListener("change", (event) => {
           const tagId = event.currentTarget.dataset.bulkTag;
@@ -1097,9 +1259,11 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const gap = 8;
     const minItemWidth = 150;
     const rowHeight = 166;
+    const optimizedMode = Boolean(game.settings.get(MODULE_ID, "optimizedMode"));
     let assetSearch = "";
     let allAssets = [];
     let visibleAssets = [];
+    let managerPage = 1;
     let renderFrame = null;
 
     const rebuildAssetSource = () => {
@@ -1122,6 +1286,23 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
       const count = body.querySelector("[data-asset-manager-count]");
       if (count) count.textContent = `${visibleAssets.length} / ${allAssets.length}`;
+      managerPage = clampPage(managerPage, getManagerPageCount());
+      updateManagerPagination();
+    };
+
+    const getManagerPageCount = () => optimizedMode ? Math.max(1, Math.ceil(visibleAssets.length / ASSET_PAGE_SIZE)) : 1;
+
+    const updateManagerPagination = () => {
+      const controls = body.querySelector("[data-asset-manager-pagination]");
+      if (!controls) return;
+      const pageCount = getManagerPageCount();
+      controls.hidden = !optimizedMode || visibleAssets.length <= ASSET_PAGE_SIZE;
+      const status = controls.querySelector("[data-page-status]");
+      if (status) status.textContent = formatLabel("PageStatus", { page: managerPage, pages: pageCount });
+      const previous = controls.querySelector("[data-page-prev]");
+      const next = controls.querySelector("[data-page-next]");
+      if (previous) previous.disabled = managerPage <= 1;
+      if (next) next.disabled = managerPage >= pageCount;
     };
 
     const renderVisibleAssets = () => {
@@ -1131,24 +1312,26 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       const empty = body.querySelector("[data-asset-manager-empty]");
       if (!viewport || !canvas) return;
 
+      const pageStart = optimizedMode ? (managerPage - 1) * ASSET_PAGE_SIZE : 0;
+      const pageAssets = optimizedMode ? visibleAssets.slice(pageStart, pageStart + ASSET_PAGE_SIZE) : visibleAssets;
       const viewportWidth = Math.max(0, viewport.clientWidth);
       const columns = Math.max(1, Math.floor((viewportWidth + gap) / (minItemWidth + gap)));
       const itemWidth = Math.max(minItemWidth, Math.floor((viewportWidth - gap * (columns - 1)) / columns));
-      const totalRows = Math.ceil(visibleAssets.length / columns);
+      const totalRows = Math.ceil(pageAssets.length / columns);
       const maxScroll = Math.max(0, totalRows * rowHeight - viewport.clientHeight);
       if (viewport.scrollTop > maxScroll) viewport.scrollTop = maxScroll;
 
-      const firstRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - 2);
-      const lastRow = Math.min(totalRows, Math.ceil((viewport.scrollTop + viewport.clientHeight) / rowHeight) + 2);
+      const firstRow = optimizedMode ? 0 : Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - 1);
+      const lastRow = optimizedMode ? totalRows : Math.min(totalRows, Math.ceil((viewport.scrollTop + viewport.clientHeight) / rowHeight) + 1);
       const firstIndex = firstRow * columns;
-      const lastIndex = Math.min(visibleAssets.length, lastRow * columns);
+      const lastIndex = Math.min(pageAssets.length, lastRow * columns);
 
       viewport.classList.toggle("is-empty", visibleAssets.length === 0);
-      canvas.style.height = visibleAssets.length ? `${totalRows * rowHeight}px` : "0px";
+      canvas.style.height = pageAssets.length ? `${totalRows * rowHeight}px` : "0px";
       canvas.innerHTML = "";
 
       for (let index = firstIndex; index < lastIndex; index += 1) {
-        const asset = visibleAssets[index];
+        const asset = pageAssets[index];
         const column = index % columns;
         const row = Math.floor(index / columns);
         canvas.appendChild(createAssetManagerCard(asset, {
@@ -1245,6 +1428,11 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         <button type="button" data-clear-visible-assets>${escapeHtml(tagLabels.ClearAll)}</button>
       </div>
       <section class="ddb-asset-manager-tags" data-asset-manager-tags-panel hidden></section>
+      <nav class="ddb-pagination ddb-pagination--manager" data-asset-manager-pagination hidden>
+        <button type="button" data-page-prev><i class="fa-solid fa-chevron-left"></i><span>${escapeHtml(tagLabels.PreviousPage)}</span></button>
+        <span data-page-status></span>
+        <button type="button" data-page-next><span>${escapeHtml(tagLabels.NextPage)}</span><i class="fa-solid fa-chevron-right"></i></button>
+      </nav>
       <div class="ddb-asset-manager-viewport" data-asset-manager-viewport>
         <div class="ddb-asset-manager-canvas" data-asset-manager-canvas></div>
         <p class="ddb-tag-empty ddb-asset-manager-empty" data-asset-manager-empty hidden>${escapeHtml(tagLabels.NoTiles)}</p>
@@ -1264,7 +1452,26 @@ export class TileLibraryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     body.querySelector("[data-asset-manager-search]")?.addEventListener("input", (event) => {
       assetSearch = event.currentTarget.value;
+      managerPage = 1;
       refreshManager({ resetScroll: true });
+    });
+    body.querySelector("[data-asset-manager-pagination] [data-page-prev]")?.addEventListener("click", () => {
+      const nextPage = clampPage(managerPage - 1, getManagerPageCount());
+      if (nextPage === managerPage) return;
+      managerPage = nextPage;
+      const viewport = body.querySelector("[data-asset-manager-viewport]");
+      if (viewport) viewport.scrollTop = 0;
+      scheduleVisibleRender();
+      updateManagerPagination();
+    });
+    body.querySelector("[data-asset-manager-pagination] [data-page-next]")?.addEventListener("click", () => {
+      const nextPage = clampPage(managerPage + 1, getManagerPageCount());
+      if (nextPage === managerPage) return;
+      managerPage = nextPage;
+      const viewport = body.querySelector("[data-asset-manager-viewport]");
+      if (viewport) viewport.scrollTop = 0;
+      scheduleVisibleRender();
+      updateManagerPagination();
     });
     body.querySelector("[data-asset-manager-viewport]")?.addEventListener("scroll", scheduleVisibleRender);
     body.querySelector("[data-select-visible-assets]")?.addEventListener("click", () => {
@@ -1483,6 +1690,11 @@ function updatePackManagerChecks(root, visiblePackIds) {
     checkbox.checked = checked;
     checkbox.closest(".ddb-pack-manager-row")?.classList.toggle("is-hidden", !checked);
   }
+}
+
+function clampPage(page, pageCount) {
+  const count = Math.max(1, Number(pageCount) || 1);
+  return Math.min(count, Math.max(1, Number(page) || 1));
 }
 
 function createAssetManagerCard(asset, { x, y, width, height, selected, onChange }) {

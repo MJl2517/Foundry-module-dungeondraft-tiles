@@ -10,18 +10,21 @@ const DEFAULT_MAP_DPI = 256;
 const SHARED_LIBRARY_INDEX_FILE = "library-index.json";
 const SERVICE_TAG_NAMES = new Set(["colorable"]);
 const COLOR_VARIANT_VERSION = 2;
+const THUMBNAIL_MAX_SIZE = 256;
+const THUMBNAIL_QUALITY = 0.76;
 const OBJECT_SIZE_RE = /(?:^|[^0-9])([1-9][0-9]*)x([1-9][0-9]*)(?:[^0-9]|$)/i;
 const IMAGE_FILE_RE = /\.(apng|avif|bmp|gif|jpe?g|png|svg|tiff?|webp)$/i;
 
 export class LibraryStore {
   static registerSettings() {
     game.settings.register(MODULE_ID, "language", {
+      name: "DDBrowser.Language",
       scope: "client",
       config: false,
       type: String,
       choices: {
-        ru: "Русский",
-        en: "English"
+        ru: "DDBrowser.Russian",
+        en: "DDBrowser.English"
       },
       default: "ru"
     });
@@ -34,7 +37,8 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "importPath", {
-      name: "Dungeondraft Tile Browser Import Path",
+      name: "DDBrowser.ImportPath",
+      hint: "DDBrowser.ImportPathHint",
       scope: "world",
       config: false,
       type: String,
@@ -42,15 +46,29 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "thumbnailSize", {
-      name: "Dungeondraft Tile Browser Thumbnail Size",
+      name: "DDBrowser.ThumbnailSize",
       scope: "client",
       config: false,
       type: Number,
+      choices: {
+        120: "DDBrowser.Small",
+        160: "DDBrowser.Medium",
+        220: "DDBrowser.Big"
+      },
       default: DEFAULT_THUMBNAIL_SIZE
     });
 
+    game.settings.register(MODULE_ID, "optimizedMode", {
+      name: "DDBrowser.OptimizedMode",
+      hint: "DDBrowser.OptimizedModeHint",
+      scope: "client",
+      config: false,
+      type: Boolean,
+      default: false
+    });
+
     game.settings.register(MODULE_ID, "rotationStep", {
-      name: "Dungeondraft Tile Browser Rotation Step",
+      name: "DDBrowser.RotationStep",
       scope: "client",
       config: false,
       type: Number,
@@ -58,7 +76,7 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "scaleStep", {
-      name: "Dungeondraft Tile Browser Scale Step",
+      name: "DDBrowser.ScaleStep",
       scope: "client",
       config: false,
       type: Number,
@@ -66,7 +84,7 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "snapToGrid", {
-      name: "Dungeondraft Tile Browser Snap to Grid",
+      name: "DDBrowser.SnapToGrid",
       scope: "client",
       config: false,
       type: Boolean,
@@ -74,7 +92,7 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "lockPlacedTiles", {
-      name: "Dungeondraft Tile Browser Lock Placed Tiles",
+      name: "DDBrowser.LockPlacedTiles",
       scope: "client",
       config: false,
       type: Boolean,
@@ -82,7 +100,7 @@ export class LibraryStore {
     });
 
     game.settings.register(MODULE_ID, "mapDpi", {
-      name: "Dungeondraft Tile Browser Map DPI",
+      name: "DDBrowser.MapDpi",
       scope: "client",
       config: false,
       type: Number,
@@ -500,6 +518,7 @@ export class LibraryStore {
   static getAssets(filters = {}) {
     const library = this.library;
     const assetSearch = filters.assetSearch?.trim().toLowerCase() ?? "";
+    const assetNameSearch = filters.assetNameSearch?.trim().toLowerCase() ?? "";
     const author = filters.author ?? "";
     const assetTagIds = normalizeTagIds(filters.assetTagIds ?? []);
     const assetTagFilter = new Set(assetTagIds);
@@ -519,6 +538,10 @@ export class LibraryStore {
 
     return Object.values(library.assets)
       .filter((asset) => matchingPackIds.has(asset.packId))
+      .filter((asset) => {
+        if (!assetNameSearch) return true;
+        return String(asset.name ?? "").toLowerCase().includes(assetNameSearch);
+      })
       .filter((asset) => {
         if (!assetTagFilter.size) return true;
         const assigned = assetAssignments[asset.id] ?? [];
@@ -551,11 +574,13 @@ export class LibraryStore {
     const basePath = `${this.importPath}/${packId}`;
     const rawPath = `${basePath}/raw`;
     const texturePath = `${basePath}/textures/objects`;
+    const thumbnailPath = `${basePath}/thumbnails`;
 
     await ensureDirectory(this.importPath);
     await ensureDirectory(basePath);
     await ensureDirectory(rawPath);
     await ensureDirectory(texturePath);
+    await ensureDirectory(thumbnailPath);
 
     const library = this.library;
     const packMeta = {
@@ -599,6 +624,10 @@ export class LibraryStore {
       const colorable = tagIndex.colorable.has(normalizeTagPathKey(object.path)) || hasColorOverride(parsed.tags, object.path);
       const assetId = `${packId}.${hashString(object.path)}`;
       const existingAsset = library.assets[assetId];
+      const thumbSrc = await createAndUploadThumbnail(object.blob, thumbnailPath, assetId).catch((error) => {
+        console.warn(`${MODULE_ID} | Could not create thumbnail for ${object.path}`, error);
+        return existingAsset?.thumbSrc && existingAsset.thumbSrc !== existingAsset.src ? existingAsset.thumbSrc : src;
+      });
 
       library.assets[assetId] = {
         id: assetId,
@@ -606,7 +635,7 @@ export class LibraryStore {
         name: humanizeName(relativeName),
         author: packMeta.author,
         src,
-        thumbSrc: src,
+        thumbSrc: thumbSrc || src,
         tags,
         themeTags,
         width: size.width,
@@ -659,10 +688,12 @@ export class LibraryStore {
       const basePath = `${this.importPath}/${packId}`;
       const rawPath = `${basePath}/raw`;
       const texturePath = `${basePath}/textures/objects`;
+      const thumbnailPath = `${basePath}/thumbnails`;
 
       await ensureDirectory(basePath);
       await ensureDirectory(rawPath);
       await ensureDirectory(texturePath);
+      await ensureDirectory(thumbnailPath);
 
       const packMeta = {
         id: packId,
@@ -704,6 +735,10 @@ export class LibraryStore {
         const themeTags = inferThemeTags(pathInPack, tags);
         const assetId = `${packId}.${hashString(pathInPack)}`;
         const existingAsset = library.assets[assetId];
+        const thumbSrc = await createAndUploadThumbnail(file, thumbnailPath, assetId).catch((error) => {
+          console.warn(`${MODULE_ID} | Could not create thumbnail for ${pathInPack}`, error);
+          return existingAsset?.thumbSrc && existingAsset.thumbSrc !== existingAsset.src ? existingAsset.thumbSrc : src;
+        });
 
         library.assets[assetId] = {
           id: assetId,
@@ -711,7 +746,7 @@ export class LibraryStore {
           name: humanizeName(pathInPack),
           author: packMeta.author,
           src,
-          thumbSrc: src,
+          thumbSrc: thumbSrc || src,
           tags,
           themeTags,
           width: size.width,
@@ -764,6 +799,72 @@ export class LibraryStore {
     library.colorVariants[variantKey] = src;
     await this.save(library);
     return src;
+  }
+
+  static async ensureAssetThumbnail(asset) {
+    if (!asset?.id || !asset.src) return null;
+    if (asset.thumbSrc && asset.thumbSrc !== asset.src) return asset.thumbSrc;
+    if (!game.user?.isGM) return asset.thumbSrc || asset.src;
+
+    const library = this.library;
+    const current = library.assets[asset.id];
+    if (!current) return asset.thumbSrc || asset.src;
+    if (current.thumbSrc && current.thumbSrc !== current.src) return current.thumbSrc;
+
+    const thumbnailPath = `${this.importPath}/${current.packId}/thumbnails`;
+    await ensureDirectory(thumbnailPath);
+    const thumbSrc = await createAndUploadThumbnail(current.src, thumbnailPath, current.id);
+    if (!thumbSrc) return current.src;
+
+    current.thumbSrc = thumbSrc;
+    await this.save(library);
+    return thumbSrc;
+  }
+
+  static async generateMissingThumbnails({ onProgress } = {}) {
+    if (!game.user?.isGM) return { total: 0, generated: 0, skipped: 0, failed: 0 };
+
+    const library = this.library;
+    const assets = Object.values(library.assets);
+    const missing = assets.filter((asset) => asset?.id && asset.src && (!asset.thumbSrc || asset.thumbSrc === asset.src));
+    let generated = 0;
+    let failed = 0;
+
+    for (const [index, asset] of missing.entries()) {
+      try {
+        const current = library.assets[asset.id];
+        if (!current?.src) continue;
+
+        const thumbnailPath = `${this.importPath}/${current.packId}/thumbnails`;
+        await ensureDirectory(thumbnailPath);
+        const thumbSrc = await createAndUploadThumbnail(current.src, thumbnailPath, current.id);
+        if (!thumbSrc) {
+          failed += 1;
+          continue;
+        }
+
+        current.thumbSrc = thumbSrc;
+        generated += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn(`${MODULE_ID} | Could not generate thumbnail for ${asset.id}`, error);
+      }
+
+      onProgress?.({
+        total: missing.length,
+        done: index + 1,
+        generated,
+        failed
+      });
+    }
+
+    if (generated) await this.save(library);
+    return {
+      total: missing.length,
+      generated,
+      skipped: assets.length - missing.length,
+      failed
+    };
   }
 
   static get importPath() {
@@ -1359,6 +1460,61 @@ async function generateColorVariant(src, color) {
   const webp = await canvasToBlob(canvas, "image/webp", 0.92);
   if (webp) return { blob: webp, type: "image/webp" };
   return { blob: await canvasToBlob(canvas, "image/png"), type: "image/png" };
+}
+
+async function createAndUploadThumbnail(source, targetPath, assetId) {
+  const blob = await createThumbnailBlob(source);
+  if (!blob) return null;
+
+  const extension = blob.type === "image/webp" ? "webp" : "png";
+  const fileName = `${String(assetId).replace(/[^a-z0-9.-]/gi, "_")}.${extension}`;
+  const file = new File([blob], fileName, { type: blob.type });
+  return uploadFoundryFile(targetPath, file);
+}
+
+async function createThumbnailBlob(source) {
+  const { image, revoke } = await loadImageSource(source);
+  try {
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (!width || !height) return null;
+
+    const scale = Math.min(1, THUMBNAIL_MAX_SIZE / width, THUMBNAIL_MAX_SIZE / height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+
+    const context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "medium";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const webp = await canvasToBlob(canvas, "image/webp", THUMBNAIL_QUALITY);
+    if (webp) return webp;
+    return canvasToBlob(canvas, "image/png");
+  } finally {
+    revoke?.();
+  }
+}
+
+async function loadImageSource(source) {
+  if (source instanceof Blob) {
+    const url = URL.createObjectURL(source);
+    try {
+      return {
+        image: await loadImage(url),
+        revoke: () => URL.revokeObjectURL(url)
+      };
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
+  }
+
+  return {
+    image: await loadImage(source),
+    revoke: null
+  };
 }
 
 function canvasToBlob(canvas, type, quality) {
