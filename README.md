@@ -55,6 +55,12 @@
 
 ## Установка
 
+### Foundry Manifest URL
+```text
+https://github.com/MJl2517/Foundry-module-dungeondraft-tiles/releases/latest/download/module.json
+```
+
+
 Папка модуля должна называться:
 
 ```text
